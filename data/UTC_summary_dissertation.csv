@@ -1,0 +1,3 @@
+Condition,Total_Arrivals,Patients_Completed,Patients_Left,Leave_Percentage,Total_4Hour_Breaches,Breach_Percentage,Mean_Waiting_Time_Min,Mean_Triage_Wait_Time_Min,Mean_Treatment_Wait_Time_Min,Mean_Total_Wait_Time_Min,Median_Waiting_Time_Min,Max_Waiting_Time_Min,Mean_Queue_Length,Max_Queue_Length,Num_Triage_Nurses,Num_Doctors
+Normal,323,315,8,2.476780185758514,0,0.0,42.78095238095238,5.012383900928793,28.96904024767802,33.98142414860681,37.0,135,4.888333333333334,13.9,1,2
+Surge,649,617,32,4.930662557781202,144,22.18798151001541,143.86871961102108,36.53004622496148,30.115562403697997,66.64560862865947,140.0,368,24.18541666666667,59.166666666666664,1,2

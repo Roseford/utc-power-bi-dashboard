@@ -1,0 +1,166 @@
+-- ============================================================================
+-- UTC Normal vs Surge - DAX
+-- Part A: calculated tables (Modeling > New table). Paste ONE at a time.
+-- Part B: measures (Modeling > New measure). Paste ONE at a time.
+--         Put them all in a table called _Measures (see BUILD_GUIDE.md step 3).
+--
+-- Every value was recomputed in Python from your CSVs and matches the
+-- dissertation figures (see docs/expected_values.md).
+--
+-- Method used throughout your figures: compute the value for each of the 5
+-- runs, then take the mean and SAMPLE standard deviation across the runs.
+-- ============================================================================
+
+
+-- ============================ PART A : TABLES ===============================
+
+Dim_Condition =
+DATATABLE ( "Condition", STRING, { { "Normal" }, { "Surge" } } )
+
+Dim_Run =
+SELECTCOLUMNS ( GENERATESERIES ( 1, 5, 1 ), "Run", INT ( [Value] ) )
+
+
+-- ============================ PART B : MEASURES =============================
+
+------------------------------ base counts ----------------------------------
+
+Sim End Time =
+MAXX ( ALL ( Timeseries ), Timeseries[Time_Interval] )
+
+Arrivals =
+COUNTROWS ( Patients )
+
+-- "+ 0" matters: a run with no patients who left would otherwise return BLANK,
+-- and AVERAGEX silently drops blank runs (Normal LWBS would show 2.9, not 2.3).
+Patients Left =
+CALCULATE ( COUNTROWS ( Patients ), Patients[Left] = TRUE () ) + 0
+
+Completed =
+VAR EndT = [Sim End Time]
+RETURN
+    CALCULATE ( SUM ( Timeseries[Patients_Completed] ), Timeseries[Time_Interval] = EndT )
+
+Still In System =
+[Arrivals] - [Completed] - [Patients Left]
+
+Breaches 4hr =
+CALCULATE ( COUNTROWS ( Patients ), Patients[Breach_4_Hour] = TRUE () ) + 0
+
+
+------------------- per-run values (used inside the iterators) --------------
+
+Leave % =
+DIVIDE ( [Patients Left], [Arrivals] ) * 100
+
+Breach % End =
+VAR EndT = [Sim End Time]
+RETURN
+    CALCULATE ( AVERAGE ( Timeseries[Breach_Percentage] ), Timeseries[Time_Interval] = EndT )
+
+Wait End =
+VAR EndT = [Sim End Time]
+RETURN
+    CALCULATE ( AVERAGE ( Timeseries[Avg_Waiting_Time] ), Timeseries[Time_Interval] = EndT )
+
+Peak Queue =
+MAX ( Timeseries[Queue_Treatment] )
+
+
+------------------- mean and SD across runs (Figure 1 + table) --------------
+
+Arrivals Mean =
+AVERAGEX ( VALUES ( Dim_Run[Run] ), [Arrivals] )
+Arrivals SD =
+STDEVX.S ( VALUES ( Dim_Run[Run] ), [Arrivals] )
+
+Leave % Mean =
+AVERAGEX ( VALUES ( Dim_Run[Run] ), [Leave %] )
+Leave % SD =
+STDEVX.S ( VALUES ( Dim_Run[Run] ), [Leave %] )
+
+Breach % Mean =
+AVERAGEX ( VALUES ( Dim_Run[Run] ), [Breach % End] )
+Breach % SD =
+STDEVX.S ( VALUES ( Dim_Run[Run] ), [Breach % End] )
+
+Wait Mean =
+AVERAGEX ( VALUES ( Dim_Run[Run] ), [Wait End] )
+Wait SD =
+STDEVX.S ( VALUES ( Dim_Run[Run] ), [Wait End] )
+
+Peak Queue Mean =
+AVERAGEX ( VALUES ( Dim_Run[Run] ), [Peak Queue] )
+Peak Queue SD =
+STDEVX.S ( VALUES ( Dim_Run[Run] ), [Peak Queue] )
+
+Still In Mean =
+AVERAGEX ( VALUES ( Dim_Run[Run] ), [Still In System] )
+Still In SD =
+STDEVX.S ( VALUES ( Dim_Run[Run] ), [Still In System] )
+
+
+------------- error-bar bounds (clamped at 0: counts/rates can't be < 0) -----
+
+Leave % Upper  = [Leave % Mean] + [Leave % SD]
+Leave % Lower  = MAX ( 0, [Leave % Mean] - [Leave % SD] )
+
+Breach % Upper = [Breach % Mean] + [Breach % SD]
+Breach % Lower = MAX ( 0, [Breach % Mean] - [Breach % SD] )
+
+Wait Upper     = [Wait Mean] + [Wait SD]
+Wait Lower     = MAX ( 0, [Wait Mean] - [Wait SD] )
+
+Peak Queue Upper = [Peak Queue Mean] + [Peak Queue SD]
+Peak Queue Lower = MAX ( 0, [Peak Queue Mean] - [Peak Queue SD] )
+
+
+---------------------- summary table text (Summary_Table.png) ----------------
+
+Arrivals (±SD) =
+FORMAT ( [Arrivals Mean], "0.0" ) & "±" & FORMAT ( [Arrivals SD], "0.0" )
+
+Leave% (±SD) =
+FORMAT ( [Leave % Mean], "0.0" ) & "±" & FORMAT ( [Leave % SD], "0.0" )
+
+Breach% (±SD) =
+FORMAT ( [Breach % Mean], "0.0" ) & "±" & FORMAT ( [Breach % SD], "0.0" )
+
+Still_In (±SD) =
+FORMAT ( [Still In Mean], "0.0" ) & "±" & FORMAT ( [Still In SD], "0.0" )
+
+
+---------------- time series, one row per run per time step -----------------
+-- (Figure 2 and Figure 3: mean +/- SD across the 5 runs at each Time_Interval)
+
+Triage Queue Mean     = AVERAGE ( Timeseries[Queue_Triage] )
+Triage Queue Upper    = [Triage Queue Mean] + STDEV.S ( Timeseries[Queue_Triage] )
+Triage Queue Lower    = MAX ( 0, [Triage Queue Mean] - STDEV.S ( Timeseries[Queue_Triage] ) )
+
+Treatment Queue Mean  = AVERAGE ( Timeseries[Queue_Treatment] )
+Treatment Queue Upper = [Treatment Queue Mean] + STDEV.S ( Timeseries[Queue_Treatment] )
+Treatment Queue Lower = MAX ( 0, [Treatment Queue Mean] - STDEV.S ( Timeseries[Queue_Treatment] ) )
+
+Total In System Mean  = AVERAGE ( Timeseries[Total_In_System] )
+Total In System Upper = [Total In System Mean] + STDEV.S ( Timeseries[Total_In_System] )
+Total In System Lower = MAX ( 0, [Total In System Mean] - STDEV.S ( Timeseries[Total_In_System] ) )
+
+Breach % Over Time Mean  = AVERAGE ( Timeseries[Breach_Percentage] )
+Breach % Over Time Upper = [Breach % Over Time Mean] + STDEV.S ( Timeseries[Breach_Percentage] )
+Breach % Over Time Lower = MAX ( 0, [Breach % Over Time Mean] - STDEV.S ( Timeseries[Breach_Percentage] ) )
+
+
+----------------------- outcomes (Figure 5) ---------------------------------
+
+Completed % =
+DIVIDE ( [Completed], [Arrivals] )
+Left %  =
+DIVIDE ( [Patients Left], [Arrivals] )
+Still In %  =
+DIVIDE ( [Still In System], [Arrivals] )
+
+
+----------------------- distributions (Figure 4) ----------------------------
+-- Histograms need no measure: use the Patients[Wait_Bin] / Patients[Time_Bin]
+-- columns created in Power Query and Count of Patients[Patient_ID].
+-- Bars at Time_Bin >= 240 are the 4-hour breaches (colour them red by rule).
